@@ -2,6 +2,7 @@ import { NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { BookOpen, ChevronDown, ClipboardList, GraduationCap, LayoutDashboard, Menu, PanelLeftClose, TrendingUp, Users, Bell } from 'lucide-react'
 import { useState } from 'react'
 import './app.css'
+import GradeManagement from './pages/GradeManagement.jsx'
 
 const nav = [
   { label: 'Dashboard', to: '/', icon: LayoutDashboard },
@@ -32,9 +33,10 @@ function App() {
     {open && <button className="scrim" aria-label="Tutup menu" onClick={() => setOpen(false)}/>}
     <div className="main-column">
       <header className="topbar"><button className="mobile-menu" aria-label="Buka menu" onClick={() => setOpen(true)}><Menu size={21}/></button><div className="crumb">Ruang Belajar <span>/</span> <b>{title}</b></div><div className="top-actions"><span className="academic">Sistem Informasi Akademik</span><button className="icon-button" aria-label="Notifikasi"><Bell size={19}/></button><div className="user-chip"><span className="avatar">P</span><span><b>Pengguna</b><small>Prototype</small></span><ChevronDown size={15}/></div></div></header>
-      <main className="content"><div className="page-heading"><div><p className="eyebrow">SISTEM MONITORING HASIL BELAJAR</p><h1>{title}</h1><p className="subtitle">{subtitle}</p></div></div><Routes>{nav.map(({to,label,icon:Icon}) => <Route key={to} path={to} element={<section className="placeholder"><span className="placeholder-icon"><Icon size={24}/></span><div><h2>{label}</h2><p>Area halaman ini disiapkan sebagai fondasi navigasi prototype.</p><span className="status"><span/>Dalam tahap pengembangan</span></div></section>} />)}</Routes><footer>Prototype antarmuka � Sistem Monitoring Perkembangan Hasil Belajar</footer></main>
+      <main className="content"><div className="page-heading"><div><p className="eyebrow">SISTEM MONITORING HASIL BELAJAR</p><h1>{title}</h1><p className="subtitle">{subtitle}</p></div></div><Routes>{nav.map(({to,label,icon:Icon}) => <Route key={to} path={to} element={to === '/nilai' ? <GradeManagement/> : <section className="placeholder"><span className="placeholder-icon"><Icon size={24}/></span><div><h2>{label}</h2><p>Area halaman ini disiapkan sebagai fondasi navigasi prototype.</p><span className="status"><span/>Dalam tahap pengembangan</span></div></section>} />)}</Routes><footer>Prototype antarmuka � Sistem Monitoring Perkembangan Hasil Belajar</footer></main>
     </div>
   </div>
 }
 export default App
+
 

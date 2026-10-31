@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Search, Save } from 'lucide-react'
+import { activeAssessmentComponents as components } from '../data/assessmentComponents.js'
+import { calculateGradeSummary } from '../utils/gradeCalculations.js'
 import './grade-management.css'
 
 const students = [
@@ -8,46 +10,59 @@ const students = [
   { id: 'SIM-05', name: 'Eka Wulandari' }, { id: 'SIM-06', name: 'Fajar Nugraha' },
   { id: 'SIM-07', name: 'Gita Permata' }, { id: 'SIM-08', name: 'Hana Maulida' },
 ]
-const components = [{ id: 'tugas', label: 'Tugas' }, { id: 'kuis', label: 'Kuis' }, { id: 'asesmen', label: 'Asesmen' }]
 const storageKey = 'ruang-belajar.nilai.v1'
 const initialContext = { year: '2025/2026', className: 'Kelas 4', subject: 'Matematika', period: 'Semester 1' }
 const contextKey = c => [c.year, c.className, c.subject, c.period].join('|')
+const readRecords = () => { try { return JSON.parse(localStorage.getItem(storageKey) || '{}') } catch { return {} } }
 
 export default function GradeManagement() {
   const [context, setContext] = useState(initialContext)
-  const [records, setRecords] = useState(() => { try { return JSON.parse(localStorage.getItem(storageKey) || '{}') } catch { return {} } })
+  const [records, setRecords] = useState(readRecords)
   const [draft, setDraft] = useState(() => records[contextKey(initialContext)] || {})
   const [query, setQuery] = useState('')
   const [message, setMessage] = useState('')
   const key = contextKey(context)
-  const visible = useMemo(() => students.filter(s => `${s.name} ${s.id}`.toLowerCase().includes(query.toLowerCase())), [query])
+  const visible = useMemo(() => students.filter(student => `${student.name} ${student.id}`.toLowerCase().includes(query.toLowerCase())), [query])
   const updateContext = (field, value) => {
-    const next = { ...context, [field]: value }; setContext(next); setDraft(records[contextKey(next)] || {}); setMessage('')
+    const next = { ...context, [field]: value }
+    setContext(next); setDraft(records[contextKey(next)] || {}); setMessage('')
   }
-  const updateGrade = (studentId, component, value) => {
-    setDraft(prev => ({ ...prev, [studentId]: { ...prev[studentId], [component]: value } }))
+  const updateGrade = (studentId, componentId, value) => {
+    setDraft(previous => ({ ...previous, [studentId]: { ...previous[studentId], [componentId]: value } }))
     setMessage('')
   }
-  const filled = students.reduce((n, s) => n + components.filter(c => draft[s.id]?.[c.id] !== '' && draft[s.id]?.[c.id] != null).length, 0)
+  const filled = students.reduce((count, student) => count + components.filter(component => {
+    const value = draft[student.id]?.[component.id]
+    return value !== '' && value !== null && value !== undefined
+  }).length, 0)
   const save = () => {
-    for (const s of students) for (const c of components) {
-      const value = draft[s.id]?.[c.id]
+    for (const student of students) for (const component of components) {
+      const value = draft[student.id]?.[component.id]
       if (value !== '' && value != null && (!Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > 100)) {
-        setMessage(`Nilai ${c.label} untuk ${s.name} harus berada pada rentang 0–100.`); return
+        setMessage(`Nilai ${component.name} untuk ${student.name} harus berada pada rentang 0–100.`); return
       }
     }
-    const clean = Object.fromEntries(Object.entries(draft).map(([id, grades]) => [id, Object.fromEntries(Object.entries(grades).map(([comp, value]) => [comp, value === '' || value == null ? null : Number(value)]))]))
+    const clean = Object.fromEntries(Object.entries(draft).map(([studentId, grades]) => [studentId,
+      Object.fromEntries(components.map(component => {
+        const value = grades?.[component.id]
+        return [component.id, value === '' || value == null ? null : Number(value)]
+      }))]))
     const next = { ...records, [key]: clean }
-    setRecords(next); setDraft(clean)
-    try { localStorage.setItem(storageKey, JSON.stringify(next)); setMessage('Perubahan nilai tersimpan di penyimpanan lokal prototype.') }
-    catch { setMessage('Gagal menyimpan. Penyimpanan browser mungkin tidak tersedia.') }
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(next))
+      setRecords(next); setDraft(clean); setMessage('Perubahan tersimpan di penyimpanan lokal prototype.')
+    } catch { setMessage('Gagal menyimpan. Penyimpanan browser mungkin tidak tersedia.') }
   }
   return <section className="grade-page">
-    <div className="sim-notice"><b>Data simulasi</b><span>Nama dan ID siswa dibuat khusus untuk prototype; bukan data sekolah.</span></div>
-    <div className="grade-filters">{[['year','Tahun ajaran',['2025/2026','2026/2027']],['className','Kelas',['Kelas 4','Kelas 5','Kelas 6']],['subject','Mata pelajaran',['Matematika','Bahasa Indonesia','IPAS']],['period','Periode',['Semester 1','Semester 2']]].map(([field,label,options]) => <label key={field}>{label}<select value={context[field]} onChange={e => updateContext(field,e.target.value)}>{options.map(o => <option key={o}>{o}</option>)}</select></label>)}</div>
-    <div className="grade-summary"><span><b>{filled}</b> nilai terisi dari {students.length * components.length}</span><span><b>{students.length * components.length - filled}</b> belum diisi</span><label className="grade-search"><Search size={16}/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Cari nama atau ID simulasi" aria-label="Cari siswa"/></label></div>
-    <div className="grade-table-wrap"><table className="grade-table"><thead><tr><th>Siswa simulasi</th>{components.map(c => <th key={c.id}>{c.label}<small>0–100</small></th>)}</tr></thead><tbody>{visible.map(s => <tr key={s.id}><td><b>{s.name}</b><small>{s.id}</small></td>{components.map(c => { const value = draft[s.id]?.[c.id] ?? ''; return <td key={c.id}><input className={value === '' ? 'grade-empty' : ''} type="number" min="0" max="100" step="any" value={value} placeholder="Belum diisi" onChange={e => updateGrade(s.id,c.id,e.target.value)} aria-label={`${c.label}, ${s.name}`} /></td> })}</tr>)}</tbody></table>{visible.length === 0 && <p className="grade-empty-result">Tidak ada siswa yang cocok dengan pencarian.</p>}</div>
+    <div className="sim-notice"><b>Data simulasi</b><span>Nama dan ID siswa dibuat untuk prototype, bukan data sekolah. Komponen penilaian juga simulasi dan belum menjadi ketentuan final.</span></div>
+    <div className="grade-filters">{[['year','Tahun ajaran',['2025/2026','2026/2027']],['className','Kelas',['Kelas 4','Kelas 5','Kelas 6']],['subject','Mata pelajaran',['Matematika','Bahasa Indonesia','IPAS']],['period','Periode',['Semester 1','Semester 2']]].map(([field,label,options]) => <label key={field}>{label}<select value={context[field]} onChange={event => updateContext(field,event.target.value)}>{options.map(option => <option key={option}>{option}</option>)}</select></label>)}</div>
+    <div className="grade-summary"><span><b>{filled}</b> nilai terisi dari {students.length * components.length}</span><span><b>{students.length * components.length - filled}</b> belum diisi</span><label className="grade-search"><Search size={16}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Cari nama atau ID simulasi" aria-label="Cari siswa"/></label></div>
+    <div className="grade-table-wrap"><table className="grade-table"><thead><tr><th>Siswa simulasi</th>{components.map(component => <th key={component.id}>{component.name}<small>{component.required ? 'Wajib' : 'Tidak wajib'} · 0–100</small></th>)}<th>Hasil</th></tr></thead><tbody>{visible.map(student => {
+      const values = draft[student.id] || {}
+      const summary = calculateGradeSummary(values, components)
+      return <tr key={student.id}><td><b>{student.name}</b><small>{student.id}</small></td>{components.map(component => { const value = values[component.id] ?? ''; return <td key={component.id}><input className={value === '' ? 'grade-empty' : ''} type="number" min="0" max="100" step="any" value={value} placeholder="Kosong" onChange={event => updateGrade(student.id,component.id,event.target.value)} aria-label={`${component.name}, ${student.name}`}/></td> })}<td><b>{summary.average === null ? '—' : Number(summary.average.toFixed(2))}</b><small>{summary.isComplete ? 'Nilai akhir · Lengkap' : 'Rata-rata sementara · Belum lengkap'}</small>{summary.missingRequired.length > 0 && <small>Belum diisi: {summary.missingRequired.map(item => item.name).join(', ')}</small>}</td></tr>
+    })}</tbody></table>{visible.length === 0 && <p className="grade-empty-result">Tidak ada siswa yang cocok dengan pencarian.</p>}</div>
     <div className="grade-actions"><span role="status">{message}</span><button onClick={save}><Save size={16}/>Simpan perubahan</button></div>
-    <p className="grade-note">Nilai akhir, bobot komponen, dan KKTP belum dihitung. Perlu aturan sekolah yang tervalidasi.</p>
+    <p className="grade-note">Rata-rata menghitung semua komponen aktif yang terisi; kelengkapan ditentukan dari komponen wajib. Nilai akhir tidak disimpan terpisah. Tidak ada bobot atau KKTP.</p>
   </section>
 }
