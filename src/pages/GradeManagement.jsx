@@ -2,14 +2,9 @@ import { useMemo, useState } from 'react'
 import { Search, Save } from 'lucide-react'
 import { activeAssessmentComponents as components } from '../data/assessmentComponents.js'
 import { calculateGradeSummary, evaluateAttainment } from '../utils/gradeCalculations.js'
+import { academicYears, classes, getRoster, students } from '../data/students.js'
 import './grade-management.css'
 
-const students = [
-  { id: 'SIM-01', name: 'Alya Pratama' }, { id: 'SIM-02', name: 'Bima Saputra' },
-  { id: 'SIM-03', name: 'Citra Lestari' }, { id: 'SIM-04', name: 'Dafa Ramadhan' },
-  { id: 'SIM-05', name: 'Eka Wulandari' }, { id: 'SIM-06', name: 'Fajar Nugraha' },
-  { id: 'SIM-07', name: 'Gita Permata' }, { id: 'SIM-08', name: 'Hana Maulida' },
-]
 const storageKey = 'ruang-belajar.nilai.v1'
 const kktpStorageKey = 'ruang-belajar.kktp.v1'
 const initialContext = { year: '2025/2026', className: 'Kelas 4', subject: 'Matematika', period: 'Semester 1' }
@@ -27,7 +22,8 @@ export default function GradeManagement() {
   const [query, setQuery] = useState('')
   const [message, setMessage] = useState('')
   const key = contextKey(context)
-  const visible = useMemo(() => students.filter(student => `${student.name} ${student.id}`.toLowerCase().includes(query.toLowerCase())), [query])
+  const roster = useMemo(() => getRoster(context.year, context.className), [context.year, context.className])
+  const visible = useMemo(() => roster.filter(student => `${student.name} ${student.id}`.toLowerCase().includes(query.toLowerCase())), [roster, query])
   const updateContext = (field, value) => {
     const next = { ...context, [field]: value }
     setContext(next); setDraft(records[contextKey(next)] || {}); setKktpDraft(kktpRecords[kktpKey(next)] ?? ''); setMessage('')
@@ -36,7 +32,7 @@ export default function GradeManagement() {
     setDraft(previous => ({ ...previous, [studentId]: { ...previous[studentId], [componentId]: value } }))
     setMessage('')
   }
-  const filled = students.reduce((count, student) => count + components.filter(component => {
+  const filled = roster.reduce((count, student) => count + components.filter(component => {
     const value = draft[student.id]?.[component.id]
     return value !== '' && value !== null && value !== undefined
   }).length, 0)
@@ -70,14 +66,14 @@ export default function GradeManagement() {
   }
   return <section className="grade-page">
     <div className="sim-notice"><b>Data simulasi</b><span>Nama dan ID siswa dibuat untuk prototype, bukan data sekolah. Komponen penilaian juga simulasi dan belum menjadi ketentuan final.</span></div>
-    <div className="grade-filters">{[['year','Tahun ajaran',['2025/2026','2026/2027']],['className','Kelas',['Kelas 4','Kelas 5','Kelas 6']],['subject','Mata pelajaran',['Matematika','Bahasa Indonesia','IPAS']],['period','Periode',['Semester 1','Semester 2']]].map(([field,label,options]) => <label key={field}>{label}<select value={context[field]} onChange={event => updateContext(field,event.target.value)}>{options.map(option => <option key={option}>{option}</option>)}</select></label>)}</div>
+    <div className="grade-filters">{[['year','Tahun ajaran',academicYears],['className','Kelas',classes],['subject','Mata pelajaran',['Matematika','Bahasa Indonesia','IPAS']],['period','Periode',['Semester 1','Semester 2']]].map(([field,label,options]) => <label key={field}>{label}<select value={context[field]} onChange={event => updateContext(field,event.target.value)}>{options.map(option => <option key={option}>{option}</option>)}</select></label>)}</div>
     <div className="kktp-panel"><div><h2>Pengaturan KKTP</h2><p>{context.year} · {context.className} · {context.subject}</p><span>{kktpRecords[kktpKey(context)] == null ? 'KKTP belum dikonfigurasi' : `KKTP tersimpan: ${kktpRecords[kktpKey(context)]}`}</span></div><label>Nilai KKTP<input aria-label="Nilai KKTP" type="number" min="0" max="100" step="any" value={kktpDraft} placeholder="Belum dikonfigurasi" onChange={event => { setKktpDraft(event.target.value); setMessage('') }}/></label><button onClick={saveKktp}>Simpan KKTP</button></div>
-    <div className="grade-summary"><span><b>{filled}</b> nilai terisi dari {students.length * components.length}</span><span><b>{students.length * components.length - filled}</b> belum diisi</span><label className="grade-search"><Search size={16}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Cari nama atau ID simulasi" aria-label="Cari siswa"/></label></div>
+    <div className="grade-summary"><span><b>{filled}</b> nilai terisi dari {roster.length * components.length}</span><span><b>{roster.length * components.length - filled}</b> belum diisi</span><label className="grade-search"><Search size={16}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Cari nama atau ID simulasi" aria-label="Cari siswa"/></label></div>
     <div className="grade-table-wrap"><table className="grade-table"><thead><tr><th>Siswa simulasi</th>{components.map(component => <th key={component.id}>{component.name}<small>{component.required ? 'Wajib' : 'Tidak wajib'} · 0–100</small></th>)}<th>Hasil</th></tr></thead><tbody>{visible.map(student => {
       const values = draft[student.id] || {}
       const summary = calculateGradeSummary(values, components)
       return <tr key={student.id}><td><b>{student.name}</b><small>{student.id}</small></td>{components.map(component => { const value = values[component.id] ?? ''; return <td key={component.id}><input className={value === '' ? 'grade-empty' : ''} type="number" min="0" max="100" step="any" value={value} placeholder="Kosong" onChange={event => updateGrade(student.id,component.id,event.target.value)} aria-label={`${component.name}, ${student.name}`}/></td> })}<td><b>{summary.average === null ? '—' : Number(summary.average.toFixed(2))}</b><small>{summary.isComplete ? 'Nilai akhir · Lengkap' : 'Rata-rata sementara · Belum lengkap'}</small>{summary.missingRequired.length > 0 && <small>Belum diisi: {summary.missingRequired.map(item => item.name).join(', ')}</small>}<small className="attainment">{evaluateAttainment(summary,kktpRecords[kktpKey(context)])}</small></td></tr>
-    })}</tbody></table>{visible.length === 0 && <p className="grade-empty-result">Tidak ada siswa yang cocok dengan pencarian.</p>}</div>
+    })}</tbody></table>{visible.length === 0 && <p className="grade-empty-result">{roster.length === 0 ? `Belum ada siswa dengan penempatan ${context.className} pada tahun ajaran ${context.year}.` : 'Tidak ada siswa pada kelas ini yang cocok dengan pencarian.'}</p>}</div>
     <div className="grade-actions"><span role="status">{message}</span><button onClick={save}><Save size={16}/>Simpan perubahan</button></div>
     <p className="grade-note">Rata-rata menghitung semua komponen aktif yang terisi; kelengkapan ditentukan dari komponen wajib. Nilai akhir tidak disimpan terpisah. Tidak ada bobot atau KKTP.</p>
   </section>
