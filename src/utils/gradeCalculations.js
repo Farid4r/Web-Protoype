@@ -23,3 +23,10 @@ export function calculateGradeSummary(values, components) {
     ...completeness,
   }
 }
+
+export function evaluateAttainment(summary, kktp) {
+  if (!summary.isComplete) return 'Belum dapat dievaluasi'
+  if (kktp === null || kktp === undefined || kktp === '') return 'KKTP belum dikonfigurasi'
+  if (summary.average === null) return 'Belum dapat dievaluasi'
+  return summary.average >= Number(kktp) ? 'Tercapai' : 'Belum tercapai'
+}
